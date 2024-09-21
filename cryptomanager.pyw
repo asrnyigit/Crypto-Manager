@@ -152,8 +152,8 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                     self.tradeAlarmsListWidget.takeItem(self.current_row)
                     trade_alarms = self.arange_alarm_dict(trade_alarms)
 
-            except Exception as e:
-                print(e)
+            except:
+                pass
 
             self.tradeAlarmActions.setVisible(False)
 
@@ -228,8 +228,8 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
             else:
                 self.warn("Pair is not available.")
 
-        except Exception as e:
-            print(e)
+        except:
+            pass
 
     def set_order(self, symbol, side, _type, price, amount):
         try:
@@ -332,8 +332,8 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 self.orders_dict[str(idx)] = {"order_id": order_id, "symbol": symbol, "price": price, "side": side,
                                               "amount": amount}
 
-        except Exception as e:
-            print(e)
+        except:
+            pass
             #self.warn(response)
 
     def initialize(self):
@@ -367,8 +367,8 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
             for ticker in track_list:
                 self.trackListListWidget.addItem(f"{ticker} | ")
 
-        except Exception as e:
-            print(e)
+        except:
+            pass
             self.api_key = self.configuration['api_key'] = ""
             self.api_secret = self.configuration['api_secret'] = ""
             self.alarm_duration = self.configuration['alarm_duration'] = 3
