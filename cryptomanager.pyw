@@ -297,11 +297,24 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                     new_balances["USDT"] = [value, value]
 
             self.balancesListWidget.clear()
-            self.balancesListWidget.addItem(f"{'COIN':<8} {'VALUE':<8} {'AMOUNT':<8}")
+            self.balancesListWidget.addItem(f"{'COIN':<8} {'VALUE':<8} {'AMOUNT':<8} {'DAILY CHANGE':<15}")
 
             for key, value in new_balances.items():
-                self.balancesListWidget.addItem(
-                    f"{key + ':':<8}{str(round(value[0], 2)) + '$':<13}{str(round(value[1], 2)):<8}")
+                try:
+                    current_value = round(value[0], 2)
+                    amount = round(value[1], 2)
+                    open_price = available_pairs[key+"USDT"]["openPrice"]
+                    change = round(current_value - open_price * amount, 2)
+
+                    item = QListWidgetItem(f"{key + ':':<8}{str(current_value) + '$':<13}{str(amount):<13}{str(change):<13}")
+                    item.setForeground(QtGui.QColor("green" if change > 0 else "red"))
+
+                    self.balancesListWidget.addItem(item)
+
+                except:
+                    if key == "USDT":
+                        self.balancesListWidget.addItem(
+                            f"{key + ':':<8}{str(round(value[0], 2)) + '$':<13}{str(round(value[1], 2)):<13}")
 
         except:
             self.warn("An error occurred.")
@@ -340,7 +353,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         global trade_alarms, alarm_parameters, available_pairs, track_list
 
         try:
-            with open('conf.json', 'r') as json_file:
+            with open('conf2.json', 'r') as json_file:
                 self.configuration = json.load(json_file)
 
             track_list = self.configuration['tracks']
@@ -368,7 +381,6 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 self.trackListListWidget.addItem(f"{ticker} | ")
 
         except:
-            pass
             self.api_key = self.configuration['api_key'] = ""
             self.api_secret = self.configuration['api_secret'] = ""
             self.alarm_duration = self.configuration['alarm_duration'] = 3
@@ -378,7 +390,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                                 "alarm_sound": self.alarm_sound,
                                 "is_mute": self.is_mute}
 
-            with open('conf.json', 'w') as save_file:
+            with open('conf2.json', 'w') as save_file:
                 json.dump(self.configuration, save_file, indent=4)
 
         self.get_klines()
@@ -419,14 +431,15 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
     def track(self, track_dict):
         self.trackListListWidget.clear()
 
+        self.trackListListWidget.addItem(f"{'COIN':<10} {'PRICE':<10} {'PRC CHANGE':<15} {'LOW PRICE':<15} {'OPEN PRICE':<15} {'HIGH PRICE':<15}")
         try:
             for ticker, price in track_dict.items():
-                percentage_change = ((float(price) - available_pairs[ticker]) / available_pairs[ticker]) * 100
-                item = QListWidgetItem(f"{ticker:<10} {price.rstrip('0'):<10} {percentage_change:.2f}%")
+                percentage_change = ((float(price) - available_pairs[ticker]["openPrice"]) / available_pairs[ticker]["openPrice"]) * 100
+                item = QListWidgetItem(f"{ticker:<10} {price.rstrip('0'):<10} {percentage_change:.2f}%   ---   {available_pairs[ticker]['lowPrice']:<10} {available_pairs[ticker]['openPrice']:<10} {available_pairs[ticker]['highPrice']:<10}")
                 item.setForeground(QtGui.QColor("green" if percentage_change >= 0 else "red"))
                 self.trackListListWidget.addItem(item)
 
-        except:
+        except Exception as e:
             pass
 
     def save_settings(self):
@@ -440,7 +453,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                                 "alarm_sound": self.alarm_sound,
                                 "is_mute": self.is_mute}
 
-            with open('conf.json', 'w') as json_file:
+            with open('conf2.json', 'w') as json_file:
                 json.dump(self.configuration, json_file, indent=4)
 
         except Exception as e:
@@ -496,11 +509,11 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         response = req.get("https://api.binance.com/api/v3/ticker/tradingDay", params=params).json()
 
         try:
-            try:
-                for symbol in response:
-                    available_pairs[symbol["symbol"]] = float(symbol['openPrice'])
-            except:
-                pass
+            for symbol in response:
+                available_pairs[symbol["symbol"]] = {"openPrice": float(symbol['openPrice']),
+                                                     "highPrice": float(symbol['highPrice']),
+                                                     "lowPrice": float(symbol['lowPrice']),
+                                                     "priceChange": float(symbol['priceChange'])}
         except:
             pass
 
@@ -525,7 +538,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
             temp_list.append(value)
         self.configuration["tracks"] = temp_list
 
-        with open("conf.json", "w") as save_file:
+        with open("conf2", "w") as save_file:
             json.dump(self.configuration, save_file, indent=4)
 
     def changeEvent(self, event):
