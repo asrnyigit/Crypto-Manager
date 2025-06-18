@@ -1,6 +1,8 @@
 import time, json, hashlib, hmac, aiohttp
 import requests as req
 
+NAME = "binance"
+
 def create_headers(params, api_params):
     api_secret, api_key = api_params['api_secret'], api_params['api_key']
 
@@ -56,6 +58,12 @@ def query_price(pair):
 
 def query_price_all():
     url = 'https://api.binance.com/api/v3/ticker/price'
+
+    response = req.get(url)
+    return response
+
+def get_tickers():
+    url = 'https://api.binance.com/api/v3/ticker/24hr'
 
     response = req.get(url)
     return response

@@ -10,7 +10,9 @@ from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread, QEvent, Qt
 
 import gui
 import binance_api
+import mexc_api
 
+exchanges = [binance_api, mexc_api]
 lock = rwlock.RWLockFair()
 
 @dataclass
@@ -51,11 +53,14 @@ class AlarmThread(QThread):
                 continue
 
             try:
-                response = binance_api.query_price_all().json()
-                all_ticker_prices = {
-                    item['symbol']: item['price']
-                    for item in response if item['symbol'] in tickers
-                }
+                for exc in exchanges:
+                    response = exc.query_price_all().json()
+                    all_ticker_prices = {
+                        item['symbol']: item['price']
+                        for item in response if item['symbol'] in tickers
+                    }
+                    if set(tickers) == set(all_ticker_prices.keys()):
+                        break
             except Exception as e:
                 time.sleep(3)
                 continue
@@ -117,9 +122,16 @@ class TrackThread(QThread):
                 response = binance_api.query_price_all().json()
                 track_dict = {item['symbol']: item['price'] for item in response if item['symbol'] in self.track_list}
 
+                for exc in exchanges:
+                    response = exc.query_price_all().json()
+                    track_dict = {item['symbol']: item['price']
+                                  for item in response if item['symbol'] in self.track_list}
+                    if set(self.track_list) == set(track_dict.keys()):
+                        break
+
                 self.track_completed.emit(track_dict)
             except Exception as e:
-                pass
+                print(e)
 
             time.sleep(2)
 
@@ -135,7 +147,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         self.configuration = dict()
         self.is_track = True
 
-        self.available_pairs = dict()
+        self.available_tickers = pd.DataFrame(columns=["symbol", "exchange", "openPrice", "highPrice", "lowPrice"])
 
         self.setupUi(self)
         self.initialize()
@@ -210,8 +222,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
             list_id = len(self.alarms[self.alarms["type"] == _type])
 
             if is_range and price_range != 0:
-                current_price = req.get(
-                    f'https://api.binance.com/api/v3/ticker/price?symbol={pair}').json()
+                current_price = binance_api.query_price(coin.upper()).json()
                 current_price = float(current_price['price'])
 
                 upper_price = self.custom_round(current_price * (1 + price_range / 100))
@@ -281,8 +292,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 if amount > 0:
                     balances[balance["asset"].upper() + "USDT"] = amount
 
-            endpoint = 'https://api.binance.com/api/v3/ticker/price'
-            response = req.get(endpoint).json()
+            response = binance_api.query_price_all().json()
 
             new_balances = dict()
             ticker_prices = {item['symbol']: item['price'] for item in response if item['symbol'] in balances.keys()}
@@ -383,7 +393,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         except Exception as e:
             self.warn(e)
 
-        self.get_klines()
+        self.get_tickers()
 
         self.alarm_thread = AlarmThread()
         self.track_thread = TrackThread()
@@ -423,9 +433,8 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
 
         for ticker, price in track_dict.items():
             try:
-                open_price = self.available_pairs[ticker]["openPrice"]
-                low_price = self.available_pairs[ticker]["lowPrice"]
-                high_price = self.available_pairs[ticker]["highPrice"]
+                data = self.available_tickers[self.available_tickers['symbol'] == ticker]
+                open_price, low_price, high_price = float(data["openPrice"].iloc[0]), float(data["lowPrice"].iloc[0]), float(data["highPrice"].iloc[0])
                 percentage_change = round(((float(price) - open_price) / open_price) * 100, 2)
 
                 item = QListWidgetItem(f"{ticker:<15} {price.rstrip('0'):<15} {percentage_change}{'%'.ljust(15)} {low_price:<20} {open_price:<20} {high_price:<20}")
@@ -433,7 +442,7 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
                 self.trackListListWidget.addItem(item)
 
             except Exception as e:
-                pass
+                print(e)
 
     def save_settings(self):
         try:
@@ -460,10 +469,10 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
         try:
             pair = self.trackCoinLineEdit.text().upper() + "USDT"
 
-            if pair in self.available_pairs.keys() and pair not in self.track_list:
+            if pair in self.available_tickers['symbol'].values and pair not in self.track_list:
                 self.track_list.append(self.trackCoinLineEdit.text().upper() + "USDT")
                 self.track_thread.set_data(self.track_list)
-                self.get_klines()
+                self.get_tickers()
                 self.trackCoinLineEdit.clear()
             else:
                 self.warn("Pair is either not available or already in the track list.")
@@ -479,27 +488,20 @@ class MyMainWindow(QtWidgets.QMainWindow, gui.Ui_MainWindow):
     def start_stop_tracking(self):
         self.is_track = not self.is_track
 
-    def get_klines(self):
-        response = req.get("https://api.binance.com/api/v3/ticker/price").json()
+    def get_tickers(self):
+        for exchange in exchanges:
+            tickers24h = exchange.get_tickers().json()
 
-        for ticker in response:
-            self.available_pairs[ticker['symbol']] = 0
+            for ticker in tickers24h:
+                if "USDT" in ticker['symbol'] and ticker['symbol'] not in self.available_tickers['symbol'].values:
+                    new_ticker = {"symbol": ticker['symbol'],
+                               "exchange": exchange.NAME,
+                               "openPrice": ticker['openPrice'],
+                               "highPrice": ticker['highPrice'],
+                               "lowPrice": ticker['lowPrice']}
 
-        params = {
-            "symbols": str(self.track_list).replace("'", '"').replace(" ", ""),
-            "timeZone": 0
-        }
+                    self.available_tickers = pd.concat([self.available_tickers, pd.DataFrame([new_ticker])], ignore_index=True)
 
-        response = req.get("https://api.binance.com/api/v3/ticker/tradingDay", params=params).json()
-
-        for symbol in response:
-            try:
-                self.available_pairs[symbol["symbol"]] = {"openPrice": float(symbol['openPrice']),
-                                                    "highPrice": float(symbol['highPrice']),
-                                                    "lowPrice": float(symbol['lowPrice']),
-                                                    "priceChange": float(symbol['priceChange'])}
-            except Exception as e:
-                pass
 
     def warn(self, warning):
         msgBox = QMessageBox()
