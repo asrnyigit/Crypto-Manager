@@ -2,7 +2,7 @@ import time, json, hashlib, hmac
 import requests as req
 import ast
 
-NAME = "mexc"
+NAME = 'mexc'
 
 def query_price(pair):
     url = f'https://api.mexc.com/api/v3/ticker/price?symbol={pair.upper()}USDT'

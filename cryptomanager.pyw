@@ -1,16 +1,14 @@
-import time, winsound, json, math, ast
-import requests as req
+import time, winsound, json, math
 import pandas as pd
 from dataclasses import dataclass, asdict
 from readerwriterlock import rwlock
 
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtWidgets import QListWidgetItem, QMessageBox, QMenu
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread, QEvent, Qt
+from PyQt5.QtCore import pyqtSignal, QThread, QEvent, Qt
 
 import gui
-import binance_api
-import mexc_api
+from apis import binance_api, mexc_api
 
 exchanges = [binance_api, mexc_api]
 lock = rwlock.RWLockFair()

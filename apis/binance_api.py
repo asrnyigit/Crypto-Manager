@@ -1,7 +1,7 @@
 import time, json, hashlib, hmac, aiohttp
 import requests as req
 
-NAME = "binance"
+NAME = 'binance'
 
 def create_headers(params, api_params):
     api_secret, api_key = api_params['api_secret'], api_params['api_key']
